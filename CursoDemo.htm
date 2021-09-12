@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="es">
+	<head>
+		<meta charset="UTF-8">
+		<title>Curso Demo</title>
+		<style>
+			html,body{min-height:100%;margin:0;padding:0;background-color:black}
+			#virtual-town-container{position:fixed;left:0;top:0;right:0;bottom:0;width:100%;height:100%}
+			#score{position:fixed;left:5px;top:0;color:white;font-size:20px;font-family:Arial;font-size:50px}
+		</style>
+		<script src="CursoDemo.js"></script>
+	</head>
+	<body>
+		<div id="virtual-town-container"></div>
+		<span id="score">0</span>
+		<script>
+
+			var containerWidth;
+			var containerHeight;
+			var scene;
+			var camera;
+			var cameraDirection;
+			var renderer;
+			var hemisphereLight;
+			var directionalLight1;
+			var directionalLight2;
+
+			var hero;
+			var heroSpeed = 5;
+			var heroDistanceCheck = 40;
+
+			var score = 0;
+
+			var floor;
+			var wall;
+			var ringMesh;
+
+			var obstacles = [];
+
+			var keyUpPressed = false;
+			var keyDownPressed = false;
+			var keyLeftPressed = false;
+			var keyRightPressed = false;
+
+			function create()
+				{
+				// GETTING THE CONTAINER SIZE
+				containerWidth = document.getElementById("virtual-town-container").offsetWidth;
+				containerHeight = document.getElementById("virtual-town-container").offsetHeight;
+
+				// SETTING THE RENDER CONFIGURATION
+				renderer = new THREE.WebGLRenderer({alpha:true});
+				renderer.setSize(window.innerWidth, window.innerHeight);
+
+				// ADDING THE CANVAS INTO THE CONTAINER
+				document.getElementById("virtual-town-container").appendChild(renderer.domElement);
+
+				// CREATING THE SCENE
+				scene = new THREE.Scene();
+
+				// ADDING THE CAMERA
+				camera = new THREE.PerspectiveCamera(45, containerWidth / containerHeight, 1, 3000);
+				camera.position.set(0, 11, 10);
+				scene.add(camera);
+
+				// ADDING A VECTOR IN ORDER TO USE IT FOR THE CAMERA DIRECTION
+				cameraDirection = new THREE.Vector3();
+
+				// ADDING THE HERO
+				hero = new THREE.Mesh(new THREE.BoxGeometry(25,25,25), new THREE.MeshBasicMaterial({color:0x000000}));
+				hero.position.y = 10;
+				hero.visible = false;
+				scene.add(hero);
+
+				// ADDING THE LIGHTS
+				directionalLight1 = new THREE.DirectionalLight(0xFFFFFF, 0.45);
+				directionalLight1.position.set(-60, 99, 0);
+				directionalLight2 = new THREE.DirectionalLight(0xFFFFFF, 0.45);
+				directionalLight2.position.set(60, 99, 0);
+				hemisphereLight = new THREE.HemisphereLight(0xFFB74D, 0x37474F, 1);
+				hemisphereLight.position.y = 500;
+				scene.add(directionalLight1,directionalLight2,hemisphereLight);
+
+				// ADDING THE FLOOR
+				var floorTexture = new THREE.ImageUtils.loadTexture("CursoDemo_Floor.jpg");
+				floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping; 
+				floorTexture.repeat.set(15,10);
+				var floorMaterial = new THREE.MeshBasicMaterial({map: floorTexture, side: THREE.DoubleSide });
+				var floorGeometry = new THREE.PlaneGeometry(1000, 1000, 0, 0);
+				var floor = new THREE.Mesh(floorGeometry, floorMaterial);
+				floor.position.y = -40;
+				floor.rotation.x = Math.PI / 2;
+				scene.add(floor);
+
+				// ADDING THE WALL
+				var wallTexture = new THREE.ImageUtils.loadTexture("CursoDemo_Wall.jpg");
+				var wallMaterial = new THREE.MeshBasicMaterial({map:wallTexture});
+				var wallGeometry = new THREE.PlaneGeometry(1000,100,100,100);
+				wall = new THREE.Mesh(wallGeometry,wallMaterial);
+				wall.position.y = 0;
+				wall.position.z = -500;
+				wall.position.x = 0;
+				wall.rotation.y = 0;
+				wall.type = "wall";
+				scene.add(wall);
+				obstacles.push(wall);
+
+				// ADDING THE RING
+				var loader = new THREE.STLLoader();
+				loader.load("CursoDemo_Ring.stl", function (geometry)
+					{
+					// NORMALIZING THE MODEL GEOMETRY
+					geometry.computeFaceNormals();
+					geometry.computeVertexNormals();
+					geometry.center();
+
+					// SETTING THE MATERIAL (COLOR OR TEXTURE FOR THE MODEL)
+					var material = new THREE.MeshLambertMaterial({ color: 0xCECECE, flatShading: THREE.FlatShading, opacity: 0.7 });
+
+					// CREATING AND LOCATING THE RING MODEL
+					ringMesh = new THREE.Mesh(geometry, material);
+					ringMesh.scale.x = 0.5;
+					ringMesh.scale.y = 0.5;
+					ringMesh.scale.z = 0.5;
+					ringMesh.position.set(0,0,-300);
+					ringMesh.type = "ring";
+
+					// ADDING THE RING MODEL TO THE SCENE AND AS AND OBJECT
+					scene.add(ringMesh);
+					obstacles.push(ringMesh);
+					});
+				}
+
+			function update()
+				{
+				// SETTING A DELAY FOR PREVENTING A FASTER GAME EXPERIENCE USING NEWER DEVICES
+				setTimeout(function()
+					{
+					// REQUESTING THE FRAME ANIMATION
+					requestAnimationFrame(update);
+					}, 1000 / 40);
+
+				// MAKING THE HERO TO FOLLOW THE CAMERA
+				hero.position.x = camera.position.x;
+				hero.position.y = camera.position.y;
+				hero.position.z = camera.position.z;
+				hero.rotation.x = camera.rotation.x;
+				hero.rotation.y = camera.rotation.y;
+				hero.rotation.z = camera.rotation.z;
+
+				if (ringMesh)
+					{
+					ringMesh.rotation.y = ringMesh.rotation.y - 0.1;
+					}
+
+				if (keyUpPressed==true)
+					{
+					// UPDATING THE CAMERA DIRECTION
+					camera.getWorldDirection(cameraDirection);
+
+					// MOVING THE HERO FORWARD
+					hero.position.addScaledVector(cameraDirection,heroDistanceCheck);
+
+					if (detectCollisions()==false)
+						{
+						// MOVING THE CAMERA FORWARD
+						camera.position.addScaledVector(cameraDirection,heroSpeed);
+						}
+						else
+						{
+						// RESTORING THE HERO LOCATION
+						hero.position.x = camera.position.x;
+						hero.position.y = camera.position.y;
+						hero.position.z = camera.position.z;
+						hero.rotation.x = camera.rotation.x;
+						hero.rotation.y = camera.rotation.y;
+						hero.rotation.z = camera.rotation.z;
+						}
+					}
+
+				if (keyDownPressed==true)
+					{
+					// UPDATING THE CAMERA DIRECTION
+					camera.getWorldDirection(cameraDirection);
+
+					// MOVING THE HERO BACKWARDS
+					hero.position.addScaledVector(cameraDirection,-heroDistanceCheck);
+
+					if (detectCollisions()==false)
+						{
+						// MOVING THE CAMERA BACKWARDS
+						camera.position.addScaledVector(cameraDirection,-heroSpeed);
+						}
+						else
+						{
+						// RESTORING THE HERO LOCATION
+						hero.position.x = camera.position.x;
+						hero.position.y = camera.position.y;
+						hero.position.z = camera.position.z;
+						hero.rotation.x = camera.rotation.x;
+						hero.rotation.y = camera.rotation.y;
+						hero.rotation.z = camera.rotation.z;
+						}
+					}
+
+				if (keyLeftPressed==true)
+					{
+					camera.rotation.y = camera.rotation.y + 0.05;
+					hero.rotation.y = hero.rotation.y + 0.05;
+					}
+
+				if (keyRightPressed==true)
+					{
+					camera.rotation.y = camera.rotation.y - 0.05;
+					hero.rotation.y = hero.rotation.y - 0.05;
+					}
+
+				// RENDERING THE SCENE
+				renderer.render(scene, camera);
+				}
+
+			function detectCollisions()
+				{
+				// LOOPING ALL THE OBSTACLES
+				for (var i = 0; i < obstacles.length; i ++)
+					{
+					// CREATING A BOX ARROUND THE HERO CURRENT POSITION
+					var heroMeshBox = new THREE.Box3().setFromObject(hero);
+
+					// CREATING A BOX ARROUND THE OBSTACLE CURRENT POSITION
+					var obstacleMeshBox = new THREE.Box3().setFromObject(obstacles[i]);
+
+					// CHECKING IF THERE WAS A HIT
+					if (heroMeshBox.intersectsBox(obstacleMeshBox)==true)
+						{
+						if (obstacles[i].type=="ring")
+							{
+							// REMOVING THE OBJECT
+							scene.remove(obstacles[i])
+							obstacles.splice(i,1);
+
+							// UPDATING THE SCORE
+							score = score + 1;
+							document.getElementById("score").innerHTML = score;
+							}
+						return true;
+						}
+					}
+
+				return false;
+				}
+
+			function resizeRenderToFitWindow()
+				{
+				try
+					{
+					camera.aspect = window.innerWidth / (window.innerHeight);
+					camera.updateProjectionMatrix();
+					renderer.setSize(window.innerWidth, window.innerHeight);
+					}
+					catch(err)
+					{
+					}
+				}
+
+			window.addEventListener("resize", function()
+				{
+				resizeRenderToFitWindow();
+				});
+
+			window.addEventListener("load", function()
+				{
+				window.addEventListener("keydown", function ()
+					{
+					if (event.keyCode === 37 || event.keyCode === 65) // LEFT KEY OR A
+						{
+						keyLeftPressed = true;
+						}
+					else if (event.keyCode === 39 || event.keyCode === 68) // RIGHT KEY OR D
+						{
+						keyRightPressed = true;
+						}
+					else if (event.keyCode === 38 || event.keyCode === 87) // RIGHT KEY OR W
+						{
+						keyUpPressed = true;
+						}
+					else if (event.keyCode === 40 || event.keyCode === 83) // RIGHT KEY OR S
+						{
+						keyDownPressed = true;
+						}
+					});
+
+				window.addEventListener("keyup", function ()
+					{
+					if (event.keyCode === 37 || event.keyCode === 65) // LEFT KEY OR A
+						{
+						keyLeftPressed = false;
+						}
+					else if (event.keyCode === 39 || event.keyCode === 68) // RIGHT KEY OR D
+						{
+						keyRightPressed = false;
+						}
+					else if (event.keyCode === 38 || event.keyCode === 87) // RIGHT KEY OR W
+						{
+						keyUpPressed = false;
+						}
+					else if (event.keyCode === 40 || event.keyCode === 83) // RIGHT KEY OR S
+						{
+						keyDownPressed = false;
+						}
+					});
+
+				create();
+
+				update();
+
+				resizeRenderToFitWindow();
+				});
+		</script>
+	</body>
+</html>
